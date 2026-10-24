@@ -1,6 +1,6 @@
 # Kế hoạch kiểm thử và kết quả
 
-Chạy toàn bộ: `python -m pytest`. Có 31 test, trong đó test end-to-end chạy tracker và từng peer thành **tiến trình riêng** giao tiếp qua TCP/HTTP.
+Chạy toàn bộ: `python -m pytest`. Có 36 test, trong đó test end-to-end chạy tracker và từng peer thành **tiến trình riêng** giao tiếp qua TCP/HTTP.
 
 Đề yêu cầu tối thiểu: 8 test chức năng, 2 test đồng thời, 2 test lỗi và phục hồi, 2 test bảo mật, 1 thí nghiệm hiệu năng.
 
@@ -70,5 +70,35 @@ Mỗi seeder bị giới hạn băng thông giả lập ở mức 1 chunk 64 KB 
 - Với 1 luồng tải, thời gian bị chặn bởi độ trễ của từng request, nên thêm seeder không giúp gì.
 - Với nhiều luồng, throughput tăng gần tuyến tính theo số seeder (2,0 → 3,9 → 5,7 MB/s). Đây là lợi ích chính của tải song song nhiều nguồn.
 - Với 1 seeder, tăng số luồng quá 4 không còn tác dụng vì băng thông của seeder đã bão hòa.
+
+## Tính năng nâng cao: kết nối lâu dài + pipeline
+
+**Test** (`tests/test_connection.py`, dùng uploader giả để điều khiển thứ tự response):
+
+| Test | Nội dung |
+|---|---|
+| `test_pipelined_requests_answered_out_of_order` | 3 request gửi liên tiếp trên 1 kết nối, server trả lời theo thứ tự ngược lại, mỗi request vẫn nhận đúng chunk |
+| `test_error_reply_keeps_connection_usable` | `NOT_HAVE` không làm đóng kết nối |
+| `test_peer_crash_fails_all_pending_requests` | Peer chết thì mọi request đang chờ thất bại ngay |
+| `test_unknown_request_id_is_protocol_error` | Response có `request_id` lạ thì bị coi là lỗi giao thức |
+| `test_busy_peer_rejected_at_handshake` | Peer hết slot thì báo `BUSY` |
+
+**Benchmark trước và sau**
+
+Lệnh: `python scripts/bench_pipeline.py --mb 16 --chunk-kb <32|16> --seeders 2 --workers <4|8> --repeat 3`. File 16 MB, 2 seeder, không giới hạn băng thông, chạy trên localhost, lấy trung vị của 3 lần chạy.
+
+| Cấu hình | Phiên bản | Thời gian (s) | Throughput (MB/s) | Số kết nối TCP | Số request chunk |
+|---|---|---|---|---|---|
+| chunk 32 KB, 4 luồng | Trước (1 kết nối/chunk) | 2.26 | 7.08 | 512 | 512 |
+| | **Sau (lâu dài + pipeline)** | **0.77** | **20.78** | **2** | 512 |
+| chunk 16 KB, 8 luồng | Trước (1 kết nối/chunk) | 3.42 | 4.68 | 1024 | 1024 |
+| | **Sau (lâu dài + pipeline)** | **1.73** | **9.25** | **2** | 1024 |
+
+**Nhận xét**
+- Nhanh hơn khoảng **2,9 lần** (chunk 32 KB) và **2 lần** (chunk 16 KB).
+- Số kết nối TCP giảm từ hàng trăm, hàng nghìn xuống còn **1 kết nối cho mỗi seeder**.
+- Lợi ích càng lớn khi chunk càng nhỏ, vì chi phí bắt tay (TCP handshake, `HELLO`, xác thực token) chiếm tỉ trọng lớn hơn.
+- Trên mạng thật có độ trễ (RTT) cao hơn localhost, pipeline còn giúp nhiều hơn vì không phải chờ một vòng RTT cho mỗi chunk.
+- Uploader cũng nhẹ hơn: không phải tạo hàng nghìn luồng xử lý kết nối.
 
 Gợi ý mở rộng khi viết báo cáo: chạy trên nhiều máy thật trong LAN, đo CPU/RAM bằng Task Manager hoặc `docker stats`, và đo thời gian phát hiện peer chết (khoảng `PEER_TIMEOUT` + 1s).

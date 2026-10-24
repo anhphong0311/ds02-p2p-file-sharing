@@ -78,7 +78,25 @@ Downloader                         Uploader
 
 Mã lỗi: `AUTH_FAILED`, `BUSY` (hết slot upload), `NOT_HAVE`, `BAD_REQUEST`.
 
-`request_id` dùng để đối chiếu: response có `index` hoặc `request_id` không khớp với request thì bị coi là lỗi giao thức.
+### 3.3 Kết nối lâu dài và pipeline (`src/peer/connection.py`)
+
+Downloader giữ **một kết nối TCP lâu dài tới mỗi peer nguồn**. Bắt tay `HELLO` và xác thực token chỉ làm một lần cho mỗi kết nối. Các luồng tải gửi nhiều `GET_CHUNK` liên tiếp trên cùng kết nối mà không chờ response của request trước (**pipeline**), tối đa `MAX_REQUESTS_PER_PEER` request đang chờ trên mỗi peer.
+
+```
+luồng tải 1 --GET_CHUNK(rid=a)-->|
+luồng tải 2 --GET_CHUNK(rid=b)-->|  1 kết nối TCP  -->  uploader
+luồng tải 3 --GET_CHUNK(rid=c)-->|
+reader thread <--CHUNK(rid=b)----|   ghép response với request theo request_id
+              <--CHUNK(rid=a)----|   (đúng cả khi response về khác thứ tự)
+```
+
+- Mỗi kết nối có một **reader thread** đọc response và hoàn tất `Future` tương ứng theo `request_id`.
+- Response mang `request_id` không có trong danh sách đang chờ (trùng lặp hoặc giả mạo) bị coi là lỗi giao thức, và kết nối bị đóng.
+- `ERROR NOT_HAVE` chỉ làm hỏng request đó, kết nối vẫn dùng tiếp được.
+- Kết nối hỏng (peer chết, timeout, sai giao thức) thì **mọi request đang chờ trên kết nối thất bại ngay**. Downloader đưa các chunk đó về hàng đợi và chọn peer khác. Lần sau nếu peer sống lại sẽ mở kết nối mới.
+- Peer bị cấm vì gửi chunk hỏng thì kết nối tới peer đó bị đóng ngay.
+
+Hiệu quả đo được: xem `docs/test-plan.md`, mục "Kết nối lâu dài + pipeline".
 
 ## 4. Trạng thái phân tán
 
@@ -171,6 +189,6 @@ Danh sách chunk trên tracker là **bản sao có độ trễ** (eventual consi
 ## 10. Giới hạn và hướng phát triển
 
 - **Tracker là điểm lỗi đơn lẻ (SPOF)** cho việc khám phá peer và xác thực token. Khi tracker chết, các kết nối đang mở vẫn tải tiếp được, nhưng peer mới không vào được mạng. Hướng phát triển: nhân bản tracker, hoặc dùng DHT (Kademlia).
-- Mỗi chunk mở một kết nối TCP mới, đơn giản nhưng tốn chi phí bắt tay. Có thể giữ kết nối lâu dài và pipeline nhiều request.
+- Uploader xử lý các request trên một kết nối theo thứ tự (không song song trong cùng kết nối). Song song đến từ việc tải nhiều peer cùng lúc.
 - Mỗi lần announce gửi cả danh sách chunk. Có thể gửi bitfield nén hoặc chỉ gửi phần thay đổi.
 - Chưa có choking/tit-for-tat, magnet link, TLS.

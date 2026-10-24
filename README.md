@@ -103,7 +103,7 @@ docker compose -f deploy/docker-compose.yml down -v
 ## Kiểm thử
 
 ```bash
-python -m pytest                                   # 31 test: chức năng, đồng thời, lỗi/phục hồi, bảo mật
+python -m pytest                                   # 36 test: chức năng, đồng thời, lỗi/phục hồi, bảo mật
 python scripts/benchmark.py --mb 4 --delay 0.03    # thí nghiệm hiệu năng
 ```
 
