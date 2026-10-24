@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+logs/
+downloads/
+samples/
+.demo_pids
+*.part
+*.tmp
