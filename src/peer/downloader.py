@@ -11,27 +11,24 @@ Thuật toán:
    Mỗi chunk được thử tối đa `max_chunk_retries` lần (bounded retry).
 6. Mỗi chunk tải xong được announce lên tracker -> peer khác tải được ngay từ mình.
 7. Đủ chunk -> ghép theo thứ tự và kiểm tra hash cả file.
+
+Mỗi peer nguồn chỉ dùng 1 kết nối TCP lâu dài (PeerConnection); các luồng tải
+gửi request song song trên cùng kết nối đó (pipeline, tối đa `max_requests_per_peer`).
 """
 import random
-import socket
+import threading
 import time
-import uuid
 from collections import Counter, defaultdict
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 from src.common import protocol as P
+from src.peer.connection import PeerConnection, PeerError
 from src.peer.storage import IntegrityError
 from src.peer.tracker_client import TrackerError
 
 
 class DownloadError(Exception):
     pass
-
-
-class PeerError(Exception):
-    def __init__(self, code):
-        super().__init__(code)
-        self.code = code
 
 
 class Downloader:
@@ -43,28 +40,39 @@ class Downloader:
         self.store = node.add_store(meta)
         self.s = node.settings
         self.log = node.log
+        self._conns = {}                 # peer_id -> PeerConnection
+        self._conn_locks = {}            # peer_id -> Lock (tránh 2 luồng cùng mở kết nối tới 1 peer)
+        self._conns_lock = threading.Lock()
+        self.conns_opened = 0
+
+    # ---------- kết nối lâu dài ----------
+    def _connection(self, peer):
+        pid = peer["peer_id"]
+        with self._conns_lock:
+            lock = self._conn_locks.setdefault(pid, threading.Lock())
+        with lock:
+            conn = self._conns.get(pid)
+            if conn is None or conn.closed:
+                conn = PeerConnection(peer["host"], peer["port"], self.node.peer_id, self.node.tracker.token,
+                                      self.meta["chunk_size"], self.s.connect_timeout, self.s.request_timeout,
+                                      remote_id=pid, logger=self.log)
+                self._conns[pid] = conn
+                self.conns_opened += 1
+            return conn
+
+    def _close_connections(self):
+        for conn in list(self._conns.values()):
+            conn.close()
 
     # ---------- một request lấy chunk ----------
     def _fetch(self, peer, index):
-        s = self.s
-        req_id = uuid.uuid4().hex[:8]
-        with socket.create_connection((peer["host"], peer["port"]), timeout=s.connect_timeout) as sock:
-            sock.settimeout(s.request_timeout)
-            P.send_msg(sock, {"type": P.HELLO, "peer_id": self.node.peer_id, "token": self.node.tracker.token})
-            resp, _ = P.recv_msg(sock, max_payload=0)
-            if resp["type"] == P.ERROR:
-                raise PeerError(resp.get("code", "ERROR"))
-            P.send_msg(sock, {"type": P.GET_CHUNK, "file_id": self.file_id, "index": index, "request_id": req_id})
-            resp, data = P.recv_msg(sock, max_payload=self.meta["chunk_size"])
-            if resp["type"] == P.ERROR:
-                raise PeerError(resp.get("code", "ERROR"))
-            if resp["type"] != P.CHUNK or resp.get("index") != index or resp.get("request_id") != req_id:
-                raise P.ProtocolError("unexpected response")
-            try:
-                P.send_msg(sock, {"type": P.BYE})
-            except OSError:
-                pass
-            return data
+        conn = self._connection(peer)
+        fut = conn.request(self.file_id, index)
+        try:
+            return fut.result(timeout=self.s.request_timeout)
+        except TimeoutError:
+            conn.close()  # peer không trả lời: bỏ kết nối, các request khác trên đó cũng thất bại
+            raise
 
     def _fetch_peers(self, known):
         try:
@@ -98,6 +106,19 @@ class Downloader:
 
     # ---------- vòng lặp chính ----------
     def run(self, out_path):
+        try:
+            started, sources = self._download_chunks()
+        finally:
+            self._close_connections()
+        path = self.store.assemble(out_path)
+        elapsed = time.monotonic() - started
+        self.log.info("DOWNLOAD_COMPLETE", file=self.short, out=path, seconds=f"{elapsed:.2f}",
+                      sources=",".join(f"{p}:{n}" for p, n in sorted(sources.items())) or "-",
+                      connections=self.conns_opened, file_hash="verified")
+        self.node.announce_now(self.file_id)
+        return path
+
+    def _download_chunks(self):
         s, store = self.s, self.store
         pending = set(store.missing())
         self.log.info("DOWNLOAD_START", file=self.short, name=self.meta["name"], size=self.meta["size"],
@@ -163,6 +184,8 @@ class Downloader:
                         if strikes[pid] >= s.max_peer_strikes and pid not in banned:
                             banned.add(pid)
                             self.log.warn("PEER_BANNED", peer=pid, reason="too_many_bad_chunks")
+                            if pid in self._conns:
+                                self._conns[pid].close()
                     except PeerError as e:
                         if e.code == P.E_BUSY:
                             cooldown[pid] = t + 0.3
@@ -188,11 +211,4 @@ class Downloader:
                         continue
                     if attempts[idx] > s.max_chunk_retries:
                         raise DownloadError(f"chunk {idx} failed {attempts[idx]} times")
-
-        path = store.assemble(out_path)
-        elapsed = time.monotonic() - started
-        self.log.info("DOWNLOAD_COMPLETE", file=self.short, out=path, seconds=f"{elapsed:.2f}",
-                      sources=",".join(f"{p}:{n}" for p, n in sorted(sources.items())) or "-",
-                      file_hash="verified")
-        self.node.announce_now(self.file_id)
-        return path
+        return started, sources
