@@ -140,7 +140,7 @@ Nhóm 7 – Đề tài DS02
 
 | Thành viên | MSSV | Vai trò | Phụ trách | File chính | Báo cáo |
 |---|---|---|---|---|---|
-| Trần Anh Phong | B23DCCE077 | **Trưởng nhóm** | Downloader (tải song song, rarest-first, retry, chuyển nguồn), lưu trữ và resume, PeerNode, giao thức P2P; nâng cao: kết nối TCP lâu dài + pipeline, choking/tit-for-tat; quản lý repo | `src/peer/downloader.py`, `src/peer/storage.py`, `src/peer/node.py`, `src/common/protocol.py` | Chương 6, 7, 10, 11, 15 |
+| Trần Anh Phong | B23DCCE077 | **Trưởng nhóm** | Downloader (tải song song, rarest-first, retry, chuyển nguồn), lưu trữ và resume, PeerNode, giao thức P2P; nâng cao: kết nối TCP lâu dài + pipeline; quản lý repo | `src/peer/downloader.py`, `src/peer/connection.py`, `src/peer/storage.py`, `src/peer/node.py`, `src/common/protocol.py` | Chương 6, 7, 10, 11, 15 |
 | Lỗ Quốc Khánh | B23DCCE050 | Thành viên | Tracker (API, heartbeat, announce, phát hiện peer offline), xác thực token, tracker client; nâng cao: nhân bản tracker | `src/tracker/`, `src/common/auth.py`, `src/peer/tracker_client.py` | Chương 9, 12 |
 | Nguyễn Thanh Sơn | B23DCCE080 | Thành viên | Uploader, metadata, CLI, Docker, script, benchmark; nâng cao: mã hóa TLS | `src/peer/uploader.py`, `src/common/metadata.py`, `src/peer/main.py`, `deploy/`, `scripts/` | Chương 1–5, 8, 13, 14, 16–19; ghép báo cáo, slide |
 
