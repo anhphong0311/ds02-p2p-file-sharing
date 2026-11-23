@@ -58,6 +58,11 @@ class Settings:
     data_dir: str = "data"
     log_dir: str = "logs"
 
+    tls_enabled: bool = False
+    tls_ca: str = "certs/ca.crt"
+    tls_cert: str = "certs/node.crt"
+    tls_key: str = "certs/node.key"
+
     @classmethod
     def from_env(cls):
         load_dotenv()
@@ -84,4 +89,8 @@ class Settings:
             tracker_retries=_int("TRACKER_RETRIES", d.tracker_retries),
             data_dir=_str("DATA_DIR", d.data_dir),
             log_dir=_str("LOG_DIR", d.log_dir),
+            tls_enabled=_str("TLS_ENABLED", "0").lower() in ("1", "true", "yes", "on"),
+            tls_ca=_str("TLS_CA", d.tls_ca),
+            tls_cert=_str("TLS_CERT", d.tls_cert),
+            tls_key=_str("TLS_KEY", d.tls_key),
         )

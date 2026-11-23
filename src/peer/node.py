@@ -10,6 +10,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from src.common import tls
 from src.common.auth import valid_peer_id
 from src.common.log import NodeLogger
 from src.common.metadata import build_metadata, validate_metadata
@@ -37,6 +38,8 @@ class PeerNode:
         self.settings = settings
         self.peer_id = peer_id
         self.advertise_host = advertise_host
+        self.server_tls = tls.server_context(settings)
+        self.client_tls = tls.client_context(settings)
         self.faults = faults or Faults()
         self.root = os.path.join(settings.data_dir, peer_id)
         os.makedirs(self.root, exist_ok=True)
