@@ -16,7 +16,7 @@ from src.common.log import NodeLogger
 from src.common.metadata import build_metadata, validate_metadata
 from src.peer.downloader import Downloader
 from src.peer.storage import FileStore
-from src.peer.tracker_client import TrackerClient, TrackerError, TrackerUnavailable
+from src.peer.tracker_client import MultiTrackerClient, TrackerClient, TrackerError, TrackerUnavailable
 from src.peer.uploader import UploadServer
 
 
@@ -44,7 +44,14 @@ class PeerNode:
         self.root = os.path.join(settings.data_dir, peer_id)
         os.makedirs(self.root, exist_ok=True)
         self.log = NodeLogger(peer_id, settings.log_dir)
-        self.tracker = TrackerClient(settings.tracker_url, settings.request_timeout, settings.tracker_retries, self.log)
+        # TRACKER_URL có thể liệt kê nhiều tracker nhân bản, ngăn cách bằng dấu phẩy.
+        urls = [u.strip() for u in settings.tracker_url.split(",") if u.strip()] or [settings.tracker_url]
+        if len(urls) > 1:
+            self.tracker = MultiTrackerClient(urls, settings.request_timeout, settings.tracker_retries,
+                                              self.log, self.client_tls)
+        else:
+            self.tracker = TrackerClient(urls[0], settings.request_timeout, settings.tracker_retries,
+                                         self.log, self.client_tls)
         self.stores = {}
         self._stores_lock = threading.Lock()
         self._dirty = set()
@@ -63,7 +70,8 @@ class PeerNode:
             self.log.info("STORE_RESUMED", file=store.file_id[:12], name=store.meta["name"],
                           have=len(store.have_list()), total=store.meta["num_chunks"])
         self.uploader.start()
-        self.log.info("PEER_START", port=self.port, tracker=self.settings.tracker_url, data=self.root)
+        self.log.info("PEER_START", port=self.port, tracker=self.settings.tracker_url, data=self.root,
+                      tls=self.settings.tls_enabled)
         self.register()
         threading.Thread(target=self._maintenance_loop, daemon=True, name="maintenance").start()
 

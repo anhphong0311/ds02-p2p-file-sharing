@@ -32,7 +32,7 @@ class PeerError(Exception):
 
 class PeerConnection:
     def __init__(self, host, port, my_peer_id, token, max_payload, connect_timeout, request_timeout,
-                 remote_id="?", logger=None):
+                 remote_id="?", logger=None, ssl_context=None):
         self.remote_id = remote_id
         self.max_payload = max_payload
         self.log = logger
@@ -42,6 +42,13 @@ class PeerConnection:
         self.requests_sent = 0
 
         self._sock = socket.create_connection((host, port), timeout=connect_timeout)
+        if ssl_context is not None:
+            # Mã hóa TLS hai chiều; danh tính không kiểm theo hostname (peer gọi bằng IP đổi liên tục).
+            try:
+                self._sock = ssl_context.wrap_socket(self._sock, server_hostname=None)
+            except BaseException:
+                self._sock.close()
+                raise
         try:
             self._sock.settimeout(request_timeout)
             P.send_msg(self._sock, {"type": P.HELLO, "peer_id": my_peer_id, "token": token})

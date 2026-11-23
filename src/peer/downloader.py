@@ -55,7 +55,7 @@ class Downloader:
             if conn is None or conn.closed:
                 conn = PeerConnection(peer["host"], peer["port"], self.node.peer_id, self.node.tracker.token,
                                       self.meta["chunk_size"], self.s.connect_timeout, self.s.request_timeout,
-                                      remote_id=pid, logger=self.log)
+                                      remote_id=pid, logger=self.log, ssl_context=self.node.client_tls)
                 self._conns[pid] = conn
                 self.conns_opened += 1
             return conn
