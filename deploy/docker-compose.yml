@@ -1,0 +1,79 @@
+# Mỗi node là 1 container độc lập (tiến trình + network namespace riêng).
+# Chạy từ thư mục gốc repo:
+#   docker compose -f deploy/docker-compose.yml --env-file .env up --build
+#   docker compose -f deploy/docker-compose.yml logs -f leecher
+#   docker compose -f deploy/docker-compose.yml stop seeder1        # demo mất nguồn
+#   docker compose -f deploy/docker-compose.yml stop tracker        # demo tracker chết -> dùng tracker2
+x-node: &node
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  environment: &env
+    TRACKER_URL: http://tracker:8000,http://tracker2:8000   # 2 tracker nhân bản
+    JOIN_KEY: ${JOIN_KEY:?set JOIN_KEY in .env}
+    TRACKER_SECRET: ${TRACKER_SECRET:?set TRACKER_SECRET in .env}
+    DATA_DIR: /data
+    LOG_DIR: /logs
+    CHUNK_SIZE: "262144"
+    HEARTBEAT_INTERVAL: "3"
+    PEER_TIMEOUT: "10"
+  networks: [swarm]
+
+services:
+  tracker:
+    <<: *node
+    command: python -m src.tracker.server --port 8000
+    ports: ["8000:8000"]
+    volumes: ["tracker-data:/data", "logs:/logs"]
+
+  tracker2:
+    <<: *node
+    command: python -m src.tracker.server --port 8000 --node-id tracker2
+    ports: ["8001:8000"]
+    volumes: ["tracker2-data:/data", "logs:/logs"]
+
+  seeder1:
+    <<: *node
+    depends_on: [tracker, tracker2]
+    command: >
+      sh -c "python scripts/gen_file.py /samples/demo.bin --mb 30 --seed 42 &&
+             python -m src.peer.main --peer-id seeder1 --port 7000 --advertise-host seeder1
+             --upload-delay ${UPLOAD_DELAY:-0.3} seed /samples/demo.bin"
+    volumes: ["seeder1-data:/data", "logs:/logs"]
+
+  seeder2:
+    <<: *node
+    depends_on: [tracker, tracker2]
+    command: >
+      sh -c "python scripts/gen_file.py /samples/demo.bin --mb 30 --seed 42 &&
+             python -m src.peer.main --peer-id seeder2 --port 7000 --advertise-host seeder2
+             --upload-delay ${UPLOAD_DELAY:-0.3} seed /samples/demo.bin"
+    volumes: ["seeder2-data:/data", "logs:/logs"]
+
+  leecher:
+    <<: *node
+    depends_on: [seeder1, seeder2]
+    command: >
+      python -m src.peer.main --peer-id leecher --port 7000 --advertise-host leecher
+      download demo.bin --out /data/out
+    volumes: ["leecher-data:/data", "logs:/logs"]
+
+  leecher2:
+    <<: *node
+    profiles: [extra]   # docker compose ... --profile extra up leecher2
+    command: >
+      python -m src.peer.main --peer-id leecher2 --port 7000 --advertise-host leecher2
+      download demo.bin --out /data/out
+    volumes: ["leecher2-data:/data", "logs:/logs"]
+
+networks:
+  swarm: {}
+
+volumes:
+  tracker-data: {}
+  tracker2-data: {}
+  seeder1-data: {}
+  seeder2-data: {}
+  leecher-data: {}
+  leecher2-data: {}
+  logs: {}
