@@ -166,6 +166,10 @@ class Cluster:
         with self._buf_lock:
             return "".join(self._buffers.get(name, []))
 
+    def count(self, name, pattern):
+        """Đếm số lần regex xuất hiện trong log của một node."""
+        return len(re.findall(pattern, self.log(name)))
+
     def wait_for(self, name, pattern, times=1, timeout=30):
         """Chờ tới khi log của `name` khớp regex `pattern` đủ `times` lần."""
         rx = re.compile(pattern)
