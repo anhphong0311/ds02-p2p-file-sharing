@@ -82,6 +82,14 @@ python -m src.peer.main --peer-id peerB --port 7002 serve         # seed lại n
 
 **Script demo trên Windows:** `powershell -ExecutionPolicy Bypass -File scripts\demo_local.ps1` mở sẵn 4 cửa sổ. Chèn lỗi bằng `scripts\fault_inject.ps1 kill-peerA | bad-seeder | late-leecher`.
 
+**Dashboard web demo trên Windows:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\web_demo.ps1
+```
+
+Mở `http://127.0.0.1:8088` để khởi động cụm, theo dõi tiến độ chunk, trạng thái node, SHA-256, structured log và chạy các kịch bản lỗi. Dashboard chỉ là lớp điều khiển local; dữ liệu file vẫn truyền trực tiếp giữa các peer, không đi qua tracker hay web server.
+
 **Tham số chèn lỗi của peer:**
 
 | Tham số | Tác dụng |

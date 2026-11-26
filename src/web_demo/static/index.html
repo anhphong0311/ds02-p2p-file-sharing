@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DS02 P2P Demo Console</title>
+  <meta name="description" content="Dashboard local điều khiển và quan sát hệ thống chia sẻ file P2P DS02">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">ĐỒ ÁN HỆ THỐNG PHÂN TÁN</p>
+      <h1>DS02 P2P Demo Console</h1>
+      <p class="subtitle">Điều khiển process thật, theo dõi chunk thật, không mô phỏng dữ liệu.</p>
+    </div>
+    <div class="live"><span></span><b id="clock">Đang kết nối</b></div>
+  </header>
+
+  <main>
+    <section class="hero-grid">
+      <article class="panel launch-panel">
+        <div class="section-title"><span>01</span><div><h2>Khởi động cụm</h2><p>Hai tracker, hai seeder và peerC.</p></div></div>
+        <div class="launch-row">
+          <label>Delay mỗi chunk<input id="delay" type="number" min="0" max="3" step="0.1" value="0.5"></label>
+          <label class="switch"><input id="tls" type="checkbox"><span></span>Mutual TLS</label>
+        </div>
+        <button class="primary" id="startDemo">Mở toàn bộ node demo</button>
+        <p class="hint">Dashboard không tự dừng process cũ. Hãy dọn process trước khi bắt đầu một lượt mới.</p>
+      </article>
+
+      <article class="panel progress-panel">
+        <div class="section-title"><span>02</span><div><h2>Tiến độ peerC</h2><p id="progressLabel">Chưa có lượt tải</p></div></div>
+        <div class="progress-track"><div id="progressBar"></div></div>
+        <div class="metrics">
+          <div><b id="progressValue">0%</b><span>hoàn thành</span></div>
+          <div><b id="sourceA">0</b><span>chunk peerA</span></div>
+          <div><b id="sourceB">0</b><span>chunk peerB</span></div>
+        </div>
+      </article>
+
+      <article class="panel integrity-panel">
+        <div class="section-title"><span>03</span><div><h2>Toàn vẹn file</h2><p>SHA-256 file gốc và file peerC.</p></div></div>
+        <div id="hashStatus" class="integrity-state neutral">Chưa đủ hai file để đối chiếu</div>
+        <code id="hashOriginal">File gốc: —</code>
+        <code id="hashDownloaded">File tải: —</code>
+      </article>
+    </section>
+
+    <section class="panel fault-panel">
+      <div class="section-title"><span>04</span><div><h2>Kịch bản lỗi</h2><p>Bấm đúng thời điểm khi peerC đang tải.</p></div></div>
+      <div class="fault-grid">
+        <button data-fault="late-leecher"><b>PeerD tham gia muộn</b><span>Upload khi đang tải</span></button>
+        <button data-fault="kill-peerA"><b>Dừng peerA</b><span>Chuyển nguồn sang peerB</span></button>
+        <button data-fault="restart-peerC"><b>Restart peerC</b><span>Resume từ chunk đã lưu</span></button>
+        <button data-fault="kill-tracker"><b>Dừng tracker 1</b><span>Failover sang tracker 2</span></button>
+        <button data-fault="start-tracker"><b>Bật tracker 1</b><span>Đăng ký và hội tụ lại</span></button>
+        <button data-fault="bad-seeder" class="danger"><b>Thêm peerBad</b><span>Phát hiện chunk sai hash</span></button>
+      </div>
+    </section>
+
+    <section class="two-column">
+      <article class="panel">
+        <div class="section-title"><span>05</span><div><h2>Node và tracker</h2><p>Kiểm tra cổng thật trên localhost.</p></div></div>
+        <div id="nodes" class="node-list"></div>
+      </article>
+      <article class="panel">
+        <div class="section-title"><span>06</span><div><h2>Thêm file vào mạng</h2><p>Web giao file cho một seeder process; tracker không nhận bytes.</p></div></div>
+        <form id="shareForm">
+          <input id="shareFile" type="file" required>
+          <div class="form-row"><label>Peer ID<input id="sharePeer" value="webSeeder"></label><label>Port<input id="sharePort" type="number" value="7010"></label></div>
+          <button class="secondary" type="submit">Chia sẻ bằng peer mới</button>
+        </form>
+        <hr>
+        <form id="downloadForm">
+          <div class="form-row"><label>Tên file hoặc file ID<input id="downloadTarget" value="demo.bin"></label><label>Peer ID<input id="downloadPeer" value="webLeecher"></label><label>Port<input id="downloadPort" type="number" value="7011"></label></div>
+          <button class="secondary" type="submit">Tải bằng peer mới</button>
+        </form>
+      </article>
+    </section>
+
+    <section class="panel event-panel">
+      <div class="section-title"><span>07</span><div><h2>Dòng sự kiện trực tiếp</h2><p>Structured log từ tracker và các peer.</p></div></div>
+      <div class="event-tools">
+        <select id="eventFilter"><option value="">Tất cả sự kiện</option><option>CHUNK_OK</option><option>CHUNK_SENT</option><option>CHUNK_FAILED</option><option>STORE_RESUMED</option><option>TRACKER_FAILOVER</option><option>TRACKER_BACK</option><option>CHUNK_REJECTED</option><option>PEER_BANNED</option><option>DOWNLOAD_COMPLETE</option></select>
+        <button id="pauseEvents" class="ghost">Tạm dừng log</button>
+      </div>
+      <div id="events" class="events"></div>
+    </section>
+  </main>
+
+  <div id="toast" role="status"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ __pycache__/
 data/
 logs/
 downloads/
+web_uploads/
 samples/
 .demo_pids
 *.part
